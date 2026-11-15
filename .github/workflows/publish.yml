@@ -1,0 +1,31 @@
+name: publish
+on:
+  push:
+    branches: [incoming]
+permissions:
+  contents: write
+concurrency:
+  group: publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: incoming, persist-credentials: false }
+      - name: Create the release from the pushed encrypted files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version=$(cat version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          for f in latest.json.enc latest.json.sig raydian.exe.enc raydian.exe.sig; do test -s "$f"; done
+          test ! -e raydian.exe && test ! -e latest.json
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version already published"
+            exit 0
+          fi
+          gh release create "v$version" latest.json.enc latest.json.sig raydian.exe.enc raydian.exe.sig \
+            --target main --title "$version" --notes "Encrypted update." --latest
